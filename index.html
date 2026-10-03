@@ -1,0 +1,1908 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Аркадия-7 — орбитальный мост</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #03060c;
+      --cyan: #3ee0ff;
+      --green: #3dff9a;
+      --amber: #ffb020;
+      --orange: #ff7a2f;
+      --red: #ff4d6a;
+      --ink: #d7f6ff;
+      --muted: rgba(180, 220, 235, 0.62);
+      --panel: rgba(5, 12, 22, 0.92);
+      --line: rgba(62, 224, 255, 0.45);
+      --hud-offset: 92px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Share Tech Mono", "Cascadia Mono", Consolas, monospace;
+      user-select: none;
+    }
+
+    button { font: inherit; color: inherit; cursor: pointer; }
+
+    #view { position: fixed; inset: 0; z-index: 0; }
+    #view canvas { display: block; width: 100%; height: 100%; }
+
+    .scanlines,
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .scanlines {
+      z-index: 1;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.16) 0px,
+        rgba(0, 0, 0, 0.16) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      opacity: 0.18;
+    }
+
+    .scanlines::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 22%;
+      background: linear-gradient(to bottom, transparent, rgba(62, 224, 255, 0.06), transparent);
+      animation: sweep 8s linear infinite;
+    }
+
+    .vignette {
+      z-index: 3;
+      box-shadow: inset 0 0 180px 40px rgba(0, 0, 0, 0.55);
+      transition: box-shadow 0.4s ease;
+    }
+
+    body.invasion .vignette {
+      box-shadow:
+        inset 0 0 180px 30px rgba(0, 0, 0, 0.5),
+        inset 0 0 120px rgba(255, 30, 60, 0.28);
+    }
+
+    #pins {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .pin {
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      pointer-events: auto;
+      transform-origin: 50% 100%;
+    }
+
+    .pin .tag {
+      padding: 4px 8px 3px;
+      border: 1px solid currentColor;
+      background: rgba(3, 8, 16, 0.78);
+      color: inherit;
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      text-shadow: 0 0 8px currentColor;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .pin .stem {
+      width: 1px;
+      height: 16px;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+
+    .pin:hover .tag,
+    .pin.is-active .tag {
+      background: rgba(8, 24, 36, 0.92);
+      box-shadow: 0 0 16px currentColor;
+    }
+
+    .floater {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 10px currentColor;
+      white-space: nowrap;
+    }
+
+    .hud {
+      position: fixed;
+      z-index: 5;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .brand, .stat, .clock, .hud-actions { pointer-events: auto; }
+
+        .brand, .clock {
+      pointer-events: none;
+      padding: 8px 12px;
+      background: rgba(4, 10, 18, 0.94);
+      border: 1px solid rgba(62, 224, 255, 0.28);
+    }
+
+    .brand-kicker, .stat-label, .clock span, .meter-label, .panel-kicker {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .brand-name {
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 18px;
+      letter-spacing: 0.2em;
+      text-shadow: 0 0 14px rgba(62, 224, 255, 0.75);
+    }
+
+    .stats { display: flex; gap: 8px; pointer-events: none; }
+
+    .stat {
+      min-width: 104px;
+      padding: 6px 12px 7px;
+      background: rgba(4, 10, 18, 0.94);
+      border: 1px solid rgba(120, 180, 200, 0.16);
+      border-left-width: 2px;
+    }
+
+    .stat.ore { border-left-color: var(--amber); }
+    .stat.energy { border-left-color: var(--cyan); }
+    .stat.army { border-left-color: var(--green); }
+
+    .stat-value, .clock strong {
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.up { color: var(--green); text-shadow: 0 0 10px rgba(61, 255, 154, 0.7); }
+    .stat-value.down { color: var(--red); text-shadow: 0 0 10px rgba(255, 77, 106, 0.7); }
+
+    .clock {
+      display: flex;
+      gap: 16px;
+    }
+
+    .clock strong { display: block; color: var(--cyan); }
+
+    .hud-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    #orc-btn, #counter-btn, #raid-btn, #panel-close {
+      border: 1px solid var(--orange);
+      background: rgba(28, 12, 6, 0.94);
+      color: #ffc49a;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #orc-btn, #counter-btn {
+      padding: 8px 12px;
+      max-width: 280px;
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 11px;
+      line-height: 1.35;
+      text-align: left;
+    }
+
+    #orc-btn:hover, #counter-btn:hover, #raid-btn:hover {
+      background: rgba(255, 120, 40, 0.22);
+      color: #fff;
+    }
+
+    #counter-btn {
+      border-color: var(--red);
+      color: #ffd0d8;
+      background: rgba(255, 40, 70, 0.14);
+      animation: pulse 1.1s ease-in-out infinite;
+    }
+
+    .alert {
+      position: fixed;
+      z-index: 6;
+      top: var(--hud-offset);
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border: 1px solid rgba(255, 77, 106, 0.85);
+      background: rgba(42, 6, 14, 0.86);
+      color: #ffb3c0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 12px;
+      pointer-events: none;
+      animation: pulse 1.2s ease-in-out infinite;
+      white-space: nowrap;
+    }
+
+    .panel {
+      position: fixed;
+      z-index: 5;
+      top: calc(var(--hud-offset) + 8px);
+      right: 14px;
+      width: min(360px, calc(100vw - 28px));
+      max-height: calc(100vh - var(--hud-offset) - 130px);
+      overflow: auto;
+      transform: translateX(120%);
+      visibility: hidden;
+      transition: transform 0.35s ease, visibility 0s linear 0.35s;
+      pointer-events: none;
+    }
+
+    .panel.open {
+      transform: translateX(0);
+      visibility: visible;
+      transition: transform 0.35s ease, visibility 0s;
+      pointer-events: auto;
+    }
+
+    .panel-frame {
+      position: relative;
+      padding: 16px 16px 18px;
+      background:
+        linear-gradient(180deg, rgba(18, 40, 58, 0.35), transparent 70px),
+        var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45), inset 0 0 30px rgba(62, 224, 255, 0.05);
+    }
+
+    .corner {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--cyan);
+      pointer-events: none;
+    }
+    .corner.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+    .corner.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+    .corner.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+    .corner.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #panel-close {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    #panel-title {
+      margin: 8px 0 6px;
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 18px;
+      letter-spacing: 0.06em;
+      line-height: 1.3;
+    }
+
+    #panel-status {
+      margin: 0 0 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    #panel-status.good { color: var(--green); }
+    #panel-status.warn { color: var(--amber); }
+    #panel-status.bad { color: var(--red); }
+    #panel-status.info { color: var(--cyan); }
+
+    #panel-desc {
+      margin: 0 0 14px;
+      color: rgba(215, 246, 255, 0.82);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .section-label {
+      margin: 0 0 8px;
+      color: var(--cyan);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+    }
+
+    .meter { margin-bottom: 10px; }
+    .meter-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .meter-num {
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      color: var(--ink);
+    }
+    .meter-track {
+      height: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .meter-track i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+    .meter.ore .meter-track i { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+    .meter.energy .meter-track i { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+
+    #panel-threat { margin: 4px 0 14px; letter-spacing: 0.08em; }
+    #panel-threat b { font-weight: 400; }
+
+    #raid-btn {
+      width: 100%;
+      padding: 12px 10px;
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      border-color: var(--green);
+      color: #c8ffe4;
+      background: rgba(61, 255, 154, 0.08);
+    }
+
+    #raid-btn.danger {
+      border-color: var(--red);
+      color: #ffd5dc;
+      background: rgba(255, 40, 70, 0.12);
+    }
+
+    #raid-cost {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+    }
+
+    .log {
+      position: fixed;
+      z-index: 5;
+      left: 14px;
+      bottom: 14px;
+      width: min(460px, calc(100vw - 28px));
+      padding: 10px 12px 8px;
+      background: linear-gradient(180deg, rgba(4, 10, 18, 0.2), rgba(4, 10, 18, 0.88));
+      border: 1px solid rgba(62, 224, 255, 0.2);
+      pointer-events: none;
+    }
+
+    .log h2 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.2em;
+      color: var(--cyan);
+    }
+
+    .log-line {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 3px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .log-line time { color: rgba(62, 224, 255, 0.7); flex: 0 0 auto; }
+    .log-line.good span { color: var(--green); }
+    .log-line.bad span { color: #ff8fa3; }
+    .log-line.warn span { color: var(--amber); }
+    .log-line.info span { color: var(--ink); }
+
+    .hints {
+      position: fixed;
+      z-index: 5;
+      right: 14px;
+      bottom: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: radial-gradient(circle at 50% 45%, #0b1a2c, #03060c 62%);
+      transition: opacity 0.45s ease;
+    }
+
+    #loader.hide { opacity: 0; pointer-events: none; }
+
+    #loader strong {
+      font-family: Orbitron, "Segoe UI", sans-serif;
+      letter-spacing: 0.22em;
+      font-size: 18px;
+    }
+
+    #loader span {
+      color: var(--cyan);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    [hidden] { display: none !important; }
+
+    @keyframes sweep {
+      from { top: -25%; }
+      to { top: 110%; }
+    }
+
+    @keyframes pulse {
+      50% { box-shadow: 0 0 18px rgba(255, 60, 80, 0.45); }
+    }
+
+    @media (max-width: 900px) {
+      .hints { display: none; }
+      .log { width: min(100% - 28px, 460px); }
+      .alert { white-space: normal; text-align: center; width: min(92vw, 520px); }
+      :root { --hud-offset: 150px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .scanlines::after, .alert, #counter-btn { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div id="pins"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="hud">
+    <div class="brand">
+      <span class="brand-kicker">Орбитальный мост</span>
+      <span class="brand-name">АРКАДИЯ-7</span>
+    </div>
+    <div class="stats">
+      <div class="stat ore">
+        <span class="stat-label">Руда</span>
+        <strong class="stat-value" id="stat-ore">0</strong>
+      </div>
+      <div class="stat energy">
+        <span class="stat-label">Энергия</span>
+        <strong class="stat-value" id="stat-energy">0</strong>
+      </div>
+      <div class="stat army">
+        <span class="stat-label">Армия</span>
+        <strong class="stat-value" id="stat-army">0</strong>
+      </div>
+    </div>
+    <div class="clock">
+      <div>
+        <span>Год</span>
+        <strong id="stat-year">2417</strong>
+      </div>
+      <div>
+        <span>Ход</span>
+        <strong id="stat-turn">001</strong>
+      </div>
+    </div>
+    <div class="hud-actions">
+      <button type="button" id="orc-btn">Добавить орков / Создать событие</button>
+      <button type="button" id="counter-btn" hidden>Контратака</button>
+    </div>
+  </header>
+
+  <div id="alert" class="alert" hidden>Вторжение · ресурсы убывают</div>
+
+  <aside id="panel" class="panel" aria-hidden="true">
+    <div class="panel-frame">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+      <div class="panel-head">
+        <span class="panel-kicker" id="panel-kicker">Сектор</span>
+        <button type="button" id="panel-close" aria-label="Закрыть панель">✕</button>
+      </div>
+      <h2 id="panel-title">—</h2>
+      <p id="panel-status"></p>
+      <p id="panel-desc"></p>
+      <p class="section-label">Уровень ресурсов региона</p>
+      <div id="panel-meters"></div>
+      <p id="panel-threat"></p>
+      <button type="button" id="raid-btn">Запустить рейд / Отправить отряд</button>
+      <p id="raid-cost"></p>
+    </div>
+  </aside>
+
+  <section class="log" aria-live="polite">
+    <h2>Журнал канала</h2>
+    <div id="log"></div>
+  </section>
+  <div class="hints">ЛКМ — вращение · колесо — zoom · клик по метке</div>
+
+  <div id="loader">
+    <strong>АРКАДИЯ-7</strong>
+    <span id="loader-text">Построение поверхности…</span>
+  </div>
+
+  <noscript>Для командного моста нужны JavaScript и WebGL.</noscript>
+
+  <!-- Three.js r128: обычные скрипты, файл открывается и с диска, и с локального сервера -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    /**
+     * АРКАДИЯ-7 — интерактивная планета и командный терминал.
+     *
+     * Как устроено:
+     * 1. buildPlanetTexture() рисует бесшовную карту материков объёмным шумом.
+     * 2. Three.js показывает сферу, облака, атмосферу и метки на поверхности.
+     * 3. OrbitControls: левая кнопка вращает обзор, колесо меняет масштаб.
+     * 4. Клик по метке открывает панель региона.
+     * 5. Таймеры гоняют добычу, конфликты и (по кнопке) десант орков.
+     *
+     * Чтобы подкрутить игру, меняйте объект CONFIG и массив REGION_DEFS.
+     */
+    (function () {
+      "use strict";
+
+      /* ============================================================
+         НАСТРОЙКИ
+         ============================================================ */
+      var CONFIG = {
+        planetRadius: 1,
+        cameraDistance: 2.65,
+        simMs: 3400,          // пауза между ходами симуляции
+        orcMs: 1400,          // как часто орки выжигают запасы
+        raidCost: 8,
+        raidCostContested: 12,
+        counterCost: 18,
+        orcDrain: { ore: 9, energy: 7, army: 1 },
+        passive: { energy: 5, army: 1 },
+        texW: 1024,
+        texH: 512,
+        seed: 11,
+        /* Порог материков: выше seaLevel — суша. landContrast растягивает рельеф. */
+        seaLevel: 0.468,
+        landContrast: 0.2
+      };
+
+      /* Шаблоны регионов. lat/lon проставляются после генерации карты, чтобы метки сели на сушу. */
+      var REGION_DEFS = [
+        {
+          id: "citadel",
+          name: "Техно-Цитадель",
+          status: "Союзник",
+          tone: "good",
+          desc: "Купол реакторов и орбитальных верфей. Главный источник энергии сектора и узел связи командования.",
+          ore: 46,
+          energy: 92,
+          threat: "низкая",
+          color: "#3ee0ff",
+          contested: false
+        },
+        {
+          id: "orcs",
+          name: "Долина Орков",
+          status: "Спорный",
+          tone: "warn",
+          desc: "Ущелья, затянутые дымом кузниц. Племена копят руду и режут караваны, если не ответить рейдом.",
+          ore: 74,
+          energy: 28,
+          threat: "высокая",
+          color: "#ff7a2f",
+          contested: true
+        },
+        {
+          id: "ore",
+          name: "Рудный Сектор",
+          status: "Союзник",
+          tone: "good",
+          desc: "Карьеры и магнитные сепараторы. Самые богатые жилы западного полушария, удобные для вывоза.",
+          ore: 96,
+          energy: 40,
+          threat: "низкая",
+          color: "#ffb020",
+          contested: false
+        },
+        {
+          id: "crystals",
+          name: "Кристальные Пустоши",
+          status: "Нейтральный",
+          tone: "info",
+          desc: "Соляные равнины, под которыми растут энергетические кристаллы. Связь рвётся, но выход энергии высокий.",
+          ore: 22,
+          energy: 84,
+          threat: "умеренная",
+          color: "#c084fc",
+          contested: false
+        },
+        {
+          id: "port",
+          name: "Порт Нова",
+          status: "Союзник",
+          tone: "good",
+          desc: "Орбитальный лифт и доки. Через порт приходят подкрепления — каждый рейд отсюда чуть дешевле по армии.",
+          ore: 38,
+          energy: 63,
+          threat: "низкая",
+          color: "#3dff9a",
+          contested: false
+        },
+        {
+          id: "archive",
+          name: "Архив Предтеч",
+          status: "Неизвестно",
+          tone: "info",
+          desc: "Запечатанные руины на краю полярного щита. Иногда выдают всплеск энергии и молчат неделями.",
+          ore: 18,
+          energy: 77,
+          threat: "умеренная",
+          color: "#8eb6ff",
+          contested: false
+        }
+      ];
+
+      var UP = null; /* заполнится после загрузки Three.js */
+      var state = {
+        ore: 320,
+        energy: 240,
+        army: 52,
+        year: 2417,
+        turn: 1,
+        orcId: null,
+        selectedId: null,
+        dragging: false
+      };
+
+      var regions = [];
+      var markers = [];
+      var pickRoots = [];
+      var effects = [];
+      var floaters = [];
+      var hitMaterial = null;
+      var planetGroup = null;
+      var clouds = null;
+      var camera = null;
+      var controls = null;
+      var renderer = null;
+      var raycaster = null;
+      var pointerNdc = null;
+      var clock = null;
+      var simTimer = null;
+      var orcTimer = null;
+
+      var dom = {
+        view: document.getElementById("view"),
+        pins: document.getElementById("pins"),
+        panel: document.getElementById("panel"),
+        log: document.getElementById("log"),
+        alert: document.getElementById("alert"),
+        loader: document.getElementById("loader"),
+        loaderText: document.getElementById("loader-text")
+      };
+
+      function fail(message) {
+        dom.loaderText.textContent = message;
+        dom.loader.classList.remove("hide");
+      }
+
+      function clamp(v, a, b) {
+        return Math.max(a, Math.min(b, v));
+      }
+
+      function fmt(n) {
+        return Math.round(n).toLocaleString("ru-RU");
+      }
+
+      function smoothstep(e0, e1, x) {
+        var t = clamp((x - e0) / (e1 - e0), 0, 1);
+        return t * t * (3 - 2 * t);
+      }
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function lerpColor(c1, c2, t) {
+        return [
+          Math.round(lerp(c1[0], c2[0], t)),
+          Math.round(lerp(c1[1], c2[1], t)),
+          Math.round(lerp(c1[2], c2[2], t))
+        ];
+      }
+
+      /* ------------------------------------------------------------
+         Шум. 3D value-noise даёт бесшовные материки на сфере.
+         ------------------------------------------------------------ */
+      function hash3(ix, iy, iz) {
+        var n = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(iz, 2147483647) ^ Math.imul(CONFIG.seed, 1013904223);
+        n = Math.imul(n ^ (n >>> 13), 1274126177);
+        return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+      }
+
+      function noise3(x, y, z) {
+        var ix = Math.floor(x);
+        var iy = Math.floor(y);
+        var iz = Math.floor(z);
+        var fx = x - ix;
+        var fy = y - iy;
+        var fz = z - iz;
+        var ux = fx * fx * (3 - 2 * fx);
+        var uy = fy * fy * (3 - 2 * fy);
+        var uz = fz * fz * (3 - 2 * fz);
+        var acc = 0;
+        for (var dz = 0; dz <= 1; dz++) {
+          for (var dy = 0; dy <= 1; dy++) {
+            for (var dx = 0; dx <= 1; dx++) {
+              var h = hash3(ix + dx, iy + dy, iz + dz);
+              var wx = dx ? ux : 1 - ux;
+              var wy = dy ? uy : 1 - uy;
+              var wz = dz ? uz : 1 - uz;
+              acc += h * wx * wy * wz;
+            }
+          }
+        }
+        return acc;
+      }
+
+      function fbm3(x, y, z, octaves) {
+        var v = 0;
+        var a = 0.5;
+        var f = 1;
+        var sum = 0;
+        for (var i = 0; i < octaves; i++) {
+          v += a * noise3(x * f, y * f, z * f);
+          sum += a;
+          f *= 2.03;
+          a *= 0.5;
+        }
+        return v / sum;
+      }
+
+      /**
+       * География в той же системе, что и UV сферы Three.js r128:
+       * lat +90 — северный полюс, lon -180..180.
+       */
+      function latLonToVector(latDeg, lonDeg, radius) {
+        var theta = (90 - latDeg) * Math.PI / 180;
+        var phi = (lonDeg + 180) * Math.PI / 180;
+        return new THREE.Vector3(
+          -radius * Math.cos(phi) * Math.sin(theta),
+          radius * Math.cos(theta),
+          radius * Math.sin(phi) * Math.sin(theta)
+        );
+      }
+
+      function vectorToLatLon(v) {
+        var lat = 90 - (Math.acos(clamp(v.y, -1, 1)) * 180 / Math.PI);
+        var lon = Math.atan2(v.z, -v.x) * 180 / Math.PI - 180;
+        if (lon < -180) lon += 360;
+        return { lat: lat, lon: lon };
+      }
+
+      function sampleDirection(u, v) {
+        var lon = u * 360 - 180;
+        var lat = 90 - v * 180;
+        return latLonToVector(lat, lon, 1);
+      }
+
+      function buildPlanetTexture() {
+        var w = CONFIG.texW;
+        var h = CONFIG.texH;
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        var image = ctx.createImageData(w, h);
+        var data = image.data;
+        var heights = new Float32Array(w * h);
+        var roughCanvas = document.createElement("canvas");
+        roughCanvas.width = w;
+        roughCanvas.height = h;
+        var roughCtx = roughCanvas.getContext("2d");
+        var roughImage = roughCtx.createImageData(w, h);
+        var rough = roughImage.data;
+        var lightCanvas = document.createElement("canvas");
+        lightCanvas.width = w;
+        lightCanvas.height = h;
+        var lightCtx = lightCanvas.getContext("2d");
+        var lightImage = lightCtx.createImageData(w, h);
+        var lights = lightImage.data;
+
+        var deep = [6, 28, 62];
+        var ocean = [12, 78, 138];
+        var shallow = [32, 168, 176];
+        var sand = [214, 190, 132];
+        var desert = [196, 142, 74];
+        var dry = [150, 146, 78];
+        var grass = [52, 158, 78];
+        var forest = [24, 96, 52];
+        var rock = [128, 118, 104];
+        var snow = [242, 247, 252];
+
+        for (var y = 0; y < h; y++) {
+          var v = (y + 0.5) / h;
+          var latAbs = Math.abs(v * 2 - 1);
+          for (var x = 0; x < w; x++) {
+            var u = (x + 0.5) / w;
+            var p = sampleDirection(u, v);
+            var base = fbm3(p.x * 1.7, p.y * 1.7, p.z * 1.7, 5);
+            var detail = fbm3(p.x * 4.8 + 9.2, p.y * 4.8, p.z * 4.8, 3);
+            var micro = noise3(p.x * 22.0 + 2.0, p.y * 22.0, p.z * 22.0);
+            var mixed = base * 0.74 + detail * 0.2 + micro * 0.06;
+            var e = clamp((mixed - CONFIG.seaLevel) / CONFIG.landContrast, 0, 1);
+            var moist = noise3(p.x * 2.4 + 19, p.y * 2.4, p.z * 2.4) * 2 - 1;
+            heights[y * w + x] = e;
+
+            var color;
+            if (e < 0.34) color = lerpColor(deep, ocean, smoothstep(0.05, 0.34, e));
+            else if (e < 0.46) color = lerpColor(ocean, shallow, smoothstep(0.34, 0.46, e));
+            else if (e < 0.52) color = lerpColor(shallow, sand, smoothstep(0.46, 0.52, e));
+            else if (e < 0.74) {
+              var biome = moist > 0
+                ? lerpColor(grass, forest, clamp(moist, 0, 1))
+                : lerpColor(desert, dry, clamp(moist + 1, 0, 1));
+              color = lerpColor(sand, biome, smoothstep(0.52, 0.62, e));
+            } else if (e < 0.88) {
+              color = lerpColor(moist > 0 ? forest : desert, rock, smoothstep(0.74, 0.88, e));
+            } else {
+              color = lerpColor(rock, snow, smoothstep(0.88, 0.97, e));
+            }
+
+            var ice = smoothstep(0.72, 0.92, latAbs);
+            color = lerpColor(color, snow, ice * (e > 0.4 ? 1 : 0.75));
+
+            var i = (y * w + x) * 4;
+            data[i] = color[0];
+            data[i + 1] = color[1];
+            data[i + 2] = color[2];
+            data[i + 3] = 255;
+
+            var land = e > 0.5 && ice < 0.85;
+            var roughV = land ? 205 : 95;
+            rough[i] = rough[i + 1] = rough[i + 2] = roughV;
+            rough[i + 3] = 255;
+
+            var city = 0;
+            if (land && latAbs < 0.8) {
+              var cluster = noise3(p.x * 2.1 + 4, p.y * 2.1, p.z * 2.1);
+              var spark = noise3(p.x * 16 + 2, p.y * 16, p.z * 16);
+              if (cluster > 0.58 && spark > 0.72) city = 200 + Math.floor(spark * 55);
+            }
+            lights[i] = city;
+            lights[i + 1] = Math.floor(city * 0.82);
+            lights[i + 2] = Math.floor(city * 0.45);
+            lights[i + 3] = 255;
+          }
+        }
+
+        ctx.putImageData(image, 0, 0);
+        roughCtx.putImageData(roughImage, 0, 0);
+        lightCtx.putImageData(lightImage, 0, 0);
+        return { canvas: canvas, roughCanvas: roughCanvas, lightCanvas: lightCanvas, heights: heights, w: w, h: h };
+      }
+
+      function buildCloudTexture() {
+        var w = 512;
+        var h = 256;
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        var image = ctx.createImageData(w, h);
+        var data = image.data;
+        for (var y = 0; y < h; y++) {
+          var v = (y + 0.5) / h;
+          var latAbs = Math.abs(v * 2 - 1);
+          for (var x = 0; x < w; x++) {
+            var u = (x + 0.5) / w;
+            var p = sampleDirection(u, v);
+            var n = fbm3(p.x * 2.3 + 3, p.y * 1.6 + 8, p.z * 2.3, 4);
+            var band = 1 - Math.pow(latAbs, 1.35);
+            var a = smoothstep(0.62, 0.84, n) * band;
+            var i = (y * w + x) * 4;
+            data[i] = 236;
+            data[i + 1] = 244;
+            data[i + 2] = 255;
+            data[i + 3] = Math.floor(clamp(a, 0, 1) * 180);
+          }
+        }
+        ctx.putImageData(image, 0, 0);
+        return canvas;
+      }
+
+      function makeTexture(canvas, srgb) {
+        var tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = srgb ? THREE.sRGBEncoding : THREE.LinearEncoding;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        return tex;
+      }
+
+      function angDist(a, b) {
+        var dLat = (b.lat - a.lat) * Math.PI / 180;
+        var dLon = (b.lon - a.lon) * Math.PI / 180;
+        var la1 = a.lat * Math.PI / 180;
+        var la2 = b.lat * Math.PI / 180;
+        var h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+          + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h))) * 180 / Math.PI;
+      }
+
+      function chooseSites(heights, w, h, count) {
+        var step = 8;
+        var pts = [];
+        for (var y = step; y < h - step; y += step) {
+          var lat = 90 - ((y + 0.5) / h) * 180;
+          if (Math.abs(lat) > 58) continue;
+          for (var x = 0; x < w; x += step) {
+            var elev = heights[y * w + x];
+            if (elev < 0.56) continue;
+            var lon = ((x + 0.5) / w) * 360 - 180;
+            pts.push({ lat: lat, lon: lon, elev: elev });
+          }
+        }
+        var s = CONFIG.seed * 17 + 3;
+        function rnd() {
+          s = (Math.imul(s, 16807) + 11) % 2147483647;
+          return (s & 2147483647) / 2147483647;
+        }
+        for (var i = pts.length - 1; i > 0; i--) {
+          var j = Math.floor(rnd() * (i + 1));
+          var tmp = pts[i];
+          pts[i] = pts[j];
+          pts[j] = tmp;
+        }
+        function take(minDeg) {
+          var chosen = [];
+          for (var k = 0; k < pts.length && chosen.length < count; k++) {
+            var p = pts[k];
+            var ok = true;
+            for (var c = 0; c < chosen.length; c++) {
+              if (angDist(chosen[c], p) < minDeg) { ok = false; break; }
+            }
+            if (ok) chosen.push(p);
+          }
+          return chosen;
+        }
+        var sites = take(32);
+        if (sites.length < count) sites = take(18);
+        var fallback = [
+          { lat: 32, lon: 18 }, { lat: -16, lon: 70 }, { lat: 44, lon: -40 },
+          { lat: -34, lon: -120 }, { lat: 8, lon: 146 }, { lat: 55, lon: 98 }
+        ];
+        var f = 0;
+        while (sites.length < count) sites.push(fallback[f++ % fallback.length]);
+        return sites.slice(0, count);
+      }
+
+      function createMarker(region) {
+        var group = new THREE.Group();
+        var dir = latLonToVector(region.lat, region.lon, 1);
+        group.position.copy(dir).multiplyScalar(CONFIG.planetRadius + 0.006);
+        group.quaternion.setFromUnitVectors(UP, dir);
+        group.userData.regionId = region.id;
+
+        var color = new THREE.Color(region.color);
+        var ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.045, 0.062, 40),
+          new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.004;
+        group.add(ring);
+
+        var halo = new THREE.Mesh(
+          new THREE.RingGeometry(0.07, 0.078, 40),
+          new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+        );
+        halo.rotation.x = -Math.PI / 2;
+        halo.position.y = 0.003;
+        group.add(halo);
+
+        var stem = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.004, 0.004, 0.12, 6),
+          new THREE.MeshBasicMaterial({ color: color })
+        );
+        stem.position.y = 0.06;
+        group.add(stem);
+
+        var beacon = new THREE.Mesh(
+          new THREE.SphereGeometry(0.028, 16, 16),
+          new THREE.MeshBasicMaterial({ color: color })
+        );
+        beacon.position.y = 0.125;
+        group.add(beacon);
+
+        var hit = new THREE.Mesh(
+          new THREE.SphereGeometry(0.11, 10, 10),
+          hitMaterial
+        );
+        hit.position.y = 0.06;
+        group.add(hit);
+
+        planetGroup.add(group);
+        pickRoots.push(group);
+
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "pin";
+        button.style.color = region.color;
+        button.innerHTML = '<span class="tag"></span><span class="stem"></span>';
+        button.querySelector(".tag").textContent = region.name;
+        button.addEventListener("click", function (event) {
+          event.stopPropagation();
+          openRegion(region.id);
+        });
+        dom.pins.appendChild(button);
+
+        var marker = {
+          region: region,
+          group: group,
+          ring: ring,
+          halo: halo,
+          beacon: beacon,
+          button: button,
+          baseColor: color.clone(),
+          flash: 0,
+          flashColor: color.clone(),
+          phase: Math.random() * Math.PI * 2
+        };
+        markers.push(marker);
+        return marker;
+      }
+
+      function removeMarker(id) {
+        for (var i = markers.length - 1; i >= 0; i--) {
+          if (markers[i].region.id !== id) continue;
+          var marker = markers[i];
+          planetGroup.remove(marker.group);
+          marker.group.traverse(function (child) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material && child.material !== hitMaterial) child.material.dispose();
+          });
+          if (marker.button.parentNode) marker.button.parentNode.removeChild(marker.button);
+          var rootIndex = pickRoots.indexOf(marker.group);
+          if (rootIndex >= 0) pickRoots.splice(rootIndex, 1);
+          markers.splice(i, 1);
+        }
+        regions = regions.filter(function (r) { return r.id !== id; });
+        if (state.selectedId === id) closePanel();
+      }
+
+      function flashMarker(region, hex) {
+        for (var i = 0; i < markers.length; i++) {
+          if (markers[i].region.id === region.id) {
+            markers[i].flash = 1;
+            markers[i].flashColor.set(hex);
+          }
+        }
+      }
+
+      function spawnPulse(lat, lon, hex) {
+        var group = new THREE.Group();
+        var dir = latLonToVector(lat, lon, 1);
+        group.position.copy(dir).multiplyScalar(CONFIG.planetRadius + 0.01);
+        group.quaternion.setFromUnitVectors(UP, dir);
+        var mat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(hex),
+          transparent: true,
+          opacity: 0.9,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        var ring = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.05, 32), mat);
+        ring.rotation.x = -Math.PI / 2;
+        group.add(ring);
+        var dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.03, 12, 12),
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(hex) })
+        );
+        dot.position.y = 0.05;
+        group.add(dot);
+        planetGroup.add(group);
+        effects.push({ group: group, ring: ring, mat: mat, life: 2.6, max: 2.6 });
+      }
+
+      function floatText(lat, lon, text, color) {
+        var anchor = new THREE.Object3D();
+        anchor.position.copy(latLonToVector(lat, lon, CONFIG.planetRadius + 0.16));
+        planetGroup.add(anchor);
+        var el = document.createElement("div");
+        el.className = "floater";
+        el.textContent = text;
+        el.style.color = color;
+        dom.pins.appendChild(el);
+        floaters.push({ el: el, anchor: anchor, age: 0, max: 1.7 });
+      }
+
+      function setupScene(textures, cloudCanvas) {
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.02;
+        renderer.setClearColor(0x02040a, 1);
+        renderer.domElement.style.touchAction = "none";
+        dom.view.appendChild(renderer.domElement);
+
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x02040a);
+
+        camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0.35, 0.72, 2.7);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.enablePan = false;
+        controls.rotateSpeed = 0.55;
+        controls.zoomSpeed = 0.75;
+        controls.minDistance = 1.45;
+        controls.maxDistance = 6;
+        controls.minPolarAngle = 0.12;
+        controls.maxPolarAngle = Math.PI - 0.12;
+        controls.target.set(0, 0, 0);
+        controls.mouseButtons = {
+          LEFT: THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.ROTATE
+        };
+
+        scene.add(new THREE.AmbientLight(0x243e62, 0.55));
+        scene.add(new THREE.HemisphereLight(0xb7dcff, 0x2a2218, 0.55));
+        var sun = new THREE.DirectionalLight(0xfff3dc, 1.25);
+        sun.position.set(5, 2.2, 3.4);
+        scene.add(sun);
+        setupScene.sun = sun;
+        var fill = new THREE.DirectionalLight(0x2a5c9a, 0.38);
+        fill.position.set(-5, -1.4, -3);
+        scene.add(fill);
+
+        var starPositions = new Float32Array(1600 * 3);
+        var starColors = new Float32Array(1600 * 3);
+        for (var i = 0; i < 1600; i++) {
+          var r = 28 + Math.random() * 50;
+          var theta = Math.acos(2 * Math.random() - 1);
+          var phi = Math.random() * Math.PI * 2;
+          starPositions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
+          starPositions[i * 3 + 1] = r * Math.cos(theta);
+          starPositions[i * 3 + 2] = r * Math.sin(theta) * Math.sin(phi);
+          var tint = 0.72 + Math.random() * 0.28;
+          starColors[i * 3] = tint;
+          starColors[i * 3 + 1] = tint;
+          starColors[i * 3 + 2] = Math.min(1, tint + Math.random() * 0.18);
+        }
+        var starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+        starGeo.setAttribute("color", new THREE.BufferAttribute(starColors, 3));
+        scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+          size: 1.35,
+          sizeAttenuation: false,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.9
+        })));
+
+        planetGroup = new THREE.Group();
+        scene.add(planetGroup);
+
+        var surface = new THREE.Mesh(
+          new THREE.SphereGeometry(CONFIG.planetRadius, 80, 56),
+          new THREE.MeshStandardMaterial({
+            map: makeTexture(textures.canvas, true),
+            roughnessMap: makeTexture(textures.roughCanvas, false),
+            roughness: 1,
+            metalness: 0.05,
+            emissive: new THREE.Color(0xfff2d2),
+            emissiveMap: makeTexture(textures.lightCanvas, true),
+            emissiveIntensity: 0.85
+          })
+        );
+        planetGroup.add(surface);
+
+        clouds = new THREE.Mesh(
+          new THREE.SphereGeometry(CONFIG.planetRadius + 0.025, 64, 48),
+          new THREE.MeshPhongMaterial({
+            map: makeTexture(cloudCanvas, true),
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.4,
+            shininess: 4
+          })
+        );
+        planetGroup.add(clouds);
+
+        var wire = new THREE.Mesh(
+          new THREE.SphereGeometry(CONFIG.planetRadius + 0.004, 28, 18),
+          new THREE.MeshBasicMaterial({
+            color: 0x39d6ff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.03
+          })
+        );
+        planetGroup.add(wire);
+
+        var atmos = new THREE.Mesh(
+          new THREE.SphereGeometry(CONFIG.planetRadius + 0.12, 64, 48),
+          new THREE.ShaderMaterial({
+            vertexShader: [
+              "varying vec3 vertexNormal;",
+              "void main() {",
+              "  vertexNormal = normalize(normalMatrix * normal);",
+              "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+              "}"
+            ].join("\n"),
+            fragmentShader: [
+              "varying vec3 vertexNormal;",
+              "void main() {",
+              "  float fresnel = clamp(0.78 - dot(vertexNormal, vec3(0.0, 0.0, 1.0)), 0.0, 1.0);",
+              "  float intensity = pow(fresnel, 2.4);",
+              "  gl_FragColor = vec4(0.30, 0.78, 1.0, 1.0) * intensity;",
+              "}"
+            ].join("\n"),
+            blending: THREE.AdditiveBlending,
+            side: THREE.BackSide,
+            transparent: true,
+            depthWrite: false
+          })
+        );
+        scene.add(atmos);
+
+        var orbit = new THREE.Mesh(
+          new THREE.RingGeometry(1.52, 1.535, 128),
+          new THREE.MeshBasicMaterial({
+            color: 0x3ee0ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.28
+          })
+        );
+        orbit.rotation.x = -Math.PI / 2;
+        scene.add(orbit);
+
+        var satPivot = new THREE.Group();
+        scene.add(satPivot);
+        var sat = new THREE.Mesh(
+          new THREE.BoxGeometry(0.055, 0.02, 0.085),
+          new THREE.MeshStandardMaterial({
+            color: 0xd5e8ff,
+            emissive: 0x143a66,
+            emissiveIntensity: 0.85,
+            metalness: 0.65,
+            roughness: 0.28
+          })
+        );
+        sat.position.x = 1.68;
+        satPivot.add(sat);
+        var sail = new THREE.Mesh(
+          new THREE.BoxGeometry(0.11, 0.004, 0.04),
+          new THREE.MeshStandardMaterial({
+            color: 0x123055,
+            emissive: 0x1d6cff,
+            emissiveIntensity: 0.7,
+            metalness: 0.3,
+            roughness: 0.4
+          })
+        );
+        sail.position.set(0, 0.016, 0);
+        sat.add(sail);
+
+        raycaster = new THREE.Raycaster();
+        pointerNdc = new THREE.Vector2();
+        clock = new THREE.Clock();
+
+        /* Сохраняем ссылки, которые нужны в кадре. */
+        setupScene.scene = scene;
+        setupScene.satPivot = satPivot;
+        setupScene.orbit = orbit;
+
+        window.addEventListener("resize", onResize);
+        renderer.domElement.addEventListener("pointerdown", onPointerDown);
+        renderer.domElement.addEventListener("pointerup", onPointerUp);
+        renderer.domElement.addEventListener("pointermove", onPointerMove);
+        renderer.domElement.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+        controls.addEventListener("start", function () {
+          state.dragging = true;
+          renderer.domElement.style.cursor = "grabbing";
+        });
+        controls.addEventListener("end", function () {
+          state.dragging = false;
+          renderer.domElement.style.cursor = "grab";
+        });
+        renderer.domElement.style.cursor = "grab";
+      }
+
+      function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function focusCameraOn(lat, lon) {
+        var dir = latLonToVector(lat, lon, CONFIG.cameraDistance);
+        camera.position.copy(dir);
+        camera.position.y += 0.28;
+        controls.target.set(0, 0, 0);
+        controls.update();
+        /* Солнце держим со стороны камеры, чтобы материки на стартовом ракурсе были читаемы. */
+        if (setupScene.sun) {
+          setupScene.sun.position.copy(camera.position).normalize().multiplyScalar(8);
+          setupScene.sun.position.y += 1.8;
+        }
+      }
+
+      function bindUI() {
+        document.getElementById("orc-btn").addEventListener("click", spawnOrcs);
+        document.getElementById("counter-btn").addEventListener("click", counterattack);
+        document.getElementById("raid-btn").addEventListener("click", launchRaid);
+        document.getElementById("panel-close").addEventListener("click", closePanel);
+        window.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") closePanel();
+        });
+      }
+
+      function paintHUD() {
+        document.getElementById("stat-ore").textContent = fmt(state.ore);
+        document.getElementById("stat-energy").textContent = fmt(state.energy);
+        document.getElementById("stat-army").textContent = fmt(state.army);
+        document.getElementById("stat-year").textContent = String(state.year);
+        document.getElementById("stat-turn").textContent = String(state.turn).padStart(3, "0");
+      }
+
+      function flashStat(id, dir) {
+        var el = document.getElementById(id);
+        el.classList.remove("up", "down");
+        void el.offsetWidth;
+        el.classList.add(dir);
+        setTimeout(function () { el.classList.remove("up", "down"); }, 700);
+      }
+
+      function addResource(key, delta) {
+        var before = state[key];
+        var cap = key === "army" ? 9999 : 99999;
+        state[key] = clamp(before + delta, 0, cap);
+        var elId = key === "ore" ? "stat-ore" : key === "energy" ? "stat-energy" : "stat-army";
+        document.getElementById(elId).textContent = fmt(state[key]);
+        if (state[key] !== before) flashStat(elId, delta >= 0 ? "up" : "down");
+      }
+
+      function log(text, kind) {
+        var line = document.createElement("div");
+        line.className = "log-line " + (kind || "info");
+        var time = document.createElement("time");
+        time.textContent = "Х" + String(state.turn).padStart(3, "0");
+        var msg = document.createElement("span");
+        msg.textContent = text;
+        line.appendChild(time);
+        line.appendChild(msg);
+        dom.log.insertBefore(line, dom.log.firstChild);
+        while (dom.log.children.length > 7) dom.log.removeChild(dom.log.lastChild);
+      }
+
+      function sectorName(lat, lon) {
+        var ns = lat >= 0 ? "с.ш." : "ю.ш.";
+        var ew = lon >= 0 ? "в.д." : "з.д.";
+        return Math.abs(lat).toFixed(0) + "° " + ns + " " + Math.abs(lon).toFixed(0) + "° " + ew;
+      }
+
+      function findRegion(id) {
+        for (var i = 0; i < regions.length; i++) {
+          if (regions[i].id === id) return regions[i];
+        }
+        return null;
+      }
+
+      function setMeter(id, label, value, tone) {
+        var row = document.getElementById(id);
+        if (!row) {
+          row = document.createElement("div");
+          row.id = id;
+          row.className = "meter " + tone;
+          row.innerHTML = '<div class="meter-top"><span class="meter-label"></span><span class="meter-num"></span></div><div class="meter-track"><i></i></div>';
+          document.getElementById("panel-meters").appendChild(row);
+        }
+        row.querySelector(".meter-label").textContent = label;
+        row.querySelector(".meter-num").textContent = Math.round(value) + " / 100";
+        row.querySelector("i").style.width = clamp(value, 0, 100) + "%";
+      }
+
+      function renderPanel() {
+        var region = findRegion(state.selectedId);
+        if (!region) return;
+        document.getElementById("panel-kicker").textContent = region.hostile ? "Враждебный контакт" : "Досье региона";
+        document.getElementById("panel-title").textContent = region.name;
+        var status = document.getElementById("panel-status");
+        status.textContent = "Статус: " + region.status;
+        status.className = region.tone || "info";
+        document.getElementById("panel-desc").textContent = region.desc;
+        setMeter("meter-ore", "Руда", region.ore, "ore");
+        setMeter("meter-energy", "Энергия", region.energy, "energy");
+        var threat = document.getElementById("panel-threat");
+        threat.innerHTML = "";
+        var prefix = document.createElement("span");
+        prefix.textContent = "Угроза: ";
+        var strong = document.createElement("b");
+        strong.textContent = region.threat;
+        strong.style.color = region.hostile || region.contested ? "#ff7a2f" : "#3dff9a";
+        threat.appendChild(prefix);
+        threat.appendChild(strong);
+        var raidBtn = document.getElementById("raid-btn");
+        var cost = document.getElementById("raid-cost");
+        if (region.hostile) {
+          raidBtn.textContent = "Контратака";
+          raidBtn.classList.add("danger");
+          cost.textContent = "Стоимость: " + CONFIG.counterCost + " армии. Снимает десант и останавливает утечку.";
+        } else {
+          raidBtn.textContent = "Запустить рейд / Отправить отряд";
+          raidBtn.classList.remove("danger");
+          var price = region.contested ? CONFIG.raidCostContested : CONFIG.raidCost;
+          cost.textContent = "Стоимость отряда: " + price + " армии. Часть местных запасов уйдёт в трюм.";
+        }
+        for (var i = 0; i < markers.length; i++) {
+          markers[i].button.classList.toggle("is-active", markers[i].region.id === region.id);
+        }
+      }
+
+      function openRegion(id) {
+        if (!findRegion(id)) return;
+        state.selectedId = id;
+        dom.panel.classList.add("open");
+        dom.panel.setAttribute("aria-hidden", "false");
+        renderPanel();
+      }
+
+      function closePanel() {
+        state.selectedId = null;
+        dom.panel.classList.remove("open");
+        dom.panel.setAttribute("aria-hidden", "true");
+        for (var i = 0; i < markers.length; i++) markers[i].button.classList.remove("is-active");
+      }
+
+      function launchRaid() {
+        var region = findRegion(state.selectedId);
+        if (!region) return;
+        if (region.hostile) {
+          counterattack();
+          return;
+        }
+        var cost = region.contested ? CONFIG.raidCostContested : CONFIG.raidCost;
+        if (region.id === "port") cost = Math.max(4, cost - 2);
+        if (state.army < cost) {
+          log("Отряд не укомплектован: нужно " + cost + " армии.", "warn");
+          flashStat("stat-army", "down");
+          return;
+        }
+        addResource("army", -cost);
+        var oreGain = Math.round(14 + region.ore * 0.45);
+        var energyGain = Math.round(10 + region.energy * 0.28);
+        addResource("ore", oreGain);
+        addResource("energy", energyGain);
+        region.ore = clamp(region.ore - 16, 6, 100);
+        region.energy = clamp(region.energy - 12, 6, 100);
+        flashMarker(region, "#e8fff4");
+        spawnPulse(region.lat, region.lon, "#3dff9a");
+        floatText(region.lat, region.lon, "+" + oreGain + " РУДЫ", "#ffb020");
+        log("Рейд «" + region.name + "»: +" + oreGain + " руды, +" + energyGain + " энергии.", "good");
+        renderPanel();
+      }
+
+      function frontFacing(lat, lon) {
+        var world = latLonToVector(lat, lon, CONFIG.planetRadius);
+        planetGroup.localToWorld(world);
+        var center = new THREE.Vector3();
+        planetGroup.getWorldPosition(center);
+        var normal = world.clone().sub(center).normalize();
+        var toCam = camera.position.clone().sub(world).normalize();
+        return normal.dot(toCam) > 0.25;
+      }
+
+      function farFromMarkers(lat, lon, minDeg) {
+        for (var i = 0; i < regions.length; i++) {
+          if (angDist(regions[i], { lat: lat, lon: lon }) < minDeg) return false;
+        }
+        return true;
+      }
+
+      function spawnOrcs() {
+        if (state.orcId) {
+          log("Десант уже на поверхности. Запустите контратаку.", "warn");
+          document.getElementById("counter-btn").hidden = false;
+          return;
+        }
+        var lat = 0;
+        var lon = 0;
+        var placed = false;
+        for (var attempt = 0; attempt < 40; attempt++) {
+          lat = Math.random() * 90 - 45;
+          lon = Math.random() * 360 - 180;
+          if (farFromMarkers(lat, lon, 16) && frontFacing(lat, lon)) {
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          lat = Math.random() * 70 - 35;
+          lon = Math.random() * 360 - 180;
+        }
+        var region = {
+          id: "orc-" + Date.now(),
+          name: "Аванпост Кровавой Луны",
+          status: "Враждебный",
+          tone: "bad",
+          desc: "Десантная платформа клана. Пока она цела, конвои теряют руду, энергию и людей. Снять её может только контратака.",
+          ore: 64,
+          energy: 36,
+          threat: "критическая",
+          color: "#ff2d55",
+          contested: true,
+          hostile: true,
+          lat: lat,
+          lon: lon
+        };
+        regions.push(region);
+        createMarker(region);
+        state.orcId = region.id;
+        document.body.classList.add("invasion");
+        document.getElementById("counter-btn").hidden = false;
+        dom.alert.hidden = false;
+        dom.alert.textContent = "Вторжение · −" + CONFIG.orcDrain.ore + " руды · −" + CONFIG.orcDrain.energy + " энергии · −" + CONFIG.orcDrain.army + " армии";
+        spawnPulse(lat, lon, "#ff2d55");
+        floatText(lat, lon, "ДЕСАНТ", "#ff4d6a");
+        log("Орки высадили аванпост (" + sectorName(lat, lon) + "). Ресурсы утекают.", "bad");
+        openRegion(region.id);
+      }
+
+      function counterattack() {
+        if (!state.orcId) {
+          log("Активного десанта нет.", "info");
+          return;
+        }
+        if (state.army < CONFIG.counterCost) {
+          log("Недостаточно армии для контратаки (нужно " + CONFIG.counterCost + "). Подкрепление в пути.", "warn");
+          flashStat("stat-army", "down");
+          return;
+        }
+        var region = findRegion(state.orcId);
+        addResource("army", -CONFIG.counterCost);
+        addResource("ore", 90);
+        addResource("energy", 45);
+        if (region) {
+          spawnPulse(region.lat, region.lon, "#3dff9a");
+          floatText(region.lat, region.lon, "КОНТРАТАКА", "#3dff9a");
+        }
+        removeMarker(state.orcId);
+        state.orcId = null;
+        document.body.classList.remove("invasion");
+        document.getElementById("counter-btn").hidden = true;
+        dom.alert.hidden = true;
+        log("Контратака уничтожила аванпост. Утечка остановлена, трофеи в трюме.", "good");
+      }
+
+      function randomRegion(predicate) {
+        var pool = regions.filter(predicate);
+        if (!pool.length) return null;
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      function simTick() {
+        state.turn += 1;
+        if (state.turn % 4 === 0) state.year += 1;
+        document.getElementById("stat-year").textContent = String(state.year);
+        document.getElementById("stat-turn").textContent = String(state.turn).padStart(3, "0");
+
+        if (!state.orcId) {
+          addResource("energy", CONFIG.passive.energy);
+          addResource("army", CONFIG.passive.army);
+        } else if (state.army < CONFIG.counterCost) {
+          /* Пока контратака недоступна, гарнизон пополняется — иначе десант запирает игру. */
+          addResource("army", 5);
+        }
+
+        if (Math.random() < 0.58) {
+          var mine = randomRegion(function (r) { return !r.hostile; });
+          if (!mine) return;
+          var gain = 14 + Math.floor(Math.random() * 22);
+          addResource("ore", gain);
+          mine.ore = clamp(mine.ore + 5, 0, 100);
+          flashMarker(mine, "#ffe08a");
+          spawnPulse(mine.lat, mine.lon, "#ffb020");
+          floatText(mine.lat, mine.lon, "+" + gain + " РУДЫ", "#ffb020");
+          log("Добыча — " + mine.name + ": +" + gain + " руды.", "good");
+        } else {
+          var atBase = Math.random() < 0.55;
+          var site = atBase ? randomRegion(function () { return true; }) : null;
+          var lat;
+          var lon;
+          var where;
+          if (site) {
+            lat = site.lat;
+            lon = site.lon;
+            where = site.name;
+            site.energy = clamp(site.energy - 8, 4, 100);
+            site.ore = clamp(site.ore - 4, 4, 100);
+          } else {
+            lat = Math.random() * 110 - 55;
+            lon = Math.random() * 360 - 180;
+            where = "сектор " + sectorName(lat, lon);
+          }
+          var lossArmy = 1 + Math.floor(Math.random() * 3);
+          var lossEnergy = 5 + Math.floor(Math.random() * 9);
+          addResource("army", -lossArmy);
+          addResource("energy", -lossEnergy);
+          spawnPulse(lat, lon, "#ff2d55");
+          floatText(lat, lon, "КОНФЛИКТ", "#ff4d6a");
+          log("Конфликт — " + where + ": −" + lossArmy + " армии, −" + lossEnergy + " энергии.", "bad");
+        }
+        if (state.selectedId) renderPanel();
+      }
+
+      function orcTick() {
+        if (!state.orcId) return;
+        addResource("ore", -CONFIG.orcDrain.ore);
+        addResource("energy", -CONFIG.orcDrain.energy);
+        addResource("army", -CONFIG.orcDrain.army);
+        var region = findRegion(state.orcId);
+        if (region && Math.random() < 0.45) {
+          flashMarker(region, "#ffd0d8");
+          spawnPulse(region.lat, region.lon, "#ff2d55");
+        }
+        state.orcPings = (state.orcPings || 0) + 1;
+        if (state.orcPings % 4 === 0) {
+          log("Аванпост орков жжёт запасы.", "bad");
+        }
+      }
+
+      var pointerDown = null;
+
+      function onPointerDown(event) {
+        if (event.button !== 0) return;
+        pointerDown = { x: event.clientX, y: event.clientY };
+      }
+
+      function onPointerUp(event) {
+        if (!pointerDown || event.button !== 0) return;
+        var dx = event.clientX - pointerDown.x;
+        var dy = event.clientY - pointerDown.y;
+        pointerDown = null;
+        if (dx * dx + dy * dy > 16) return;
+        pick(event);
+      }
+
+      function setPointer(event) {
+        var rect = renderer.domElement.getBoundingClientRect();
+        pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
+
+      function pick(event) {
+        setPointer(event);
+        raycaster.setFromCamera(pointerNdc, camera);
+        var hits = raycaster.intersectObjects(pickRoots, true);
+        if (!hits.length) return;
+        var obj = hits[0].object;
+        while (obj && !obj.userData.regionId) obj = obj.parent;
+        if (obj) openRegion(obj.userData.regionId);
+      }
+
+      function onPointerMove(event) {
+        if (state.dragging) return;
+        setPointer(event);
+        raycaster.setFromCamera(pointerNdc, camera);
+        var hits = raycaster.intersectObjects(pickRoots, true);
+        renderer.domElement.style.cursor = hits.length ? "pointer" : "grab";
+      }
+
+      var world = new THREE.Vector3();
+      var center = new THREE.Vector3();
+      var toCam = new THREE.Vector3();
+
+      function updateLabels() {
+        planetGroup.getWorldPosition(center);
+        for (var i = 0; i < markers.length; i++) {
+          var marker = markers[i];
+          marker.beacon.getWorldPosition(world);
+          var normal = world.clone().sub(center).normalize();
+          toCam.copy(camera.position).sub(world).normalize();
+          var facing = normal.dot(toCam);
+          var visible = facing > 0.08;
+          var el = marker.button;
+          if (!visible) {
+            el.style.visibility = "hidden";
+            el.style.pointerEvents = "none";
+            continue;
+          }
+          world.project(camera);
+          if (world.z > 1) {
+            el.style.visibility = "hidden";
+            el.style.pointerEvents = "none";
+            continue;
+          }
+          var x = (world.x * 0.5 + 0.5) * window.innerWidth;
+          var y = (-world.y * 0.5 + 0.5) * window.innerHeight;
+          el.style.visibility = "visible";
+          el.style.pointerEvents = "auto";
+          el.style.opacity = String(clamp((facing - 0.08) / 0.5, 0.25, 1));
+          el.style.transform = "translate(" + x + "px, " + y + "px) translate(-50%, -100%)";
+        }
+
+        for (var f = floaters.length - 1; f >= 0; f--) {
+          var item = floaters[f];
+          item.age += clock.delta;
+          item.anchor.getWorldPosition(world);
+          world.project(camera);
+          var life = 1 - item.age / item.max;
+          if (life <= 0 || world.z > 1) {
+            planetGroup.remove(item.anchor);
+            if (item.el.parentNode) item.el.parentNode.removeChild(item.el);
+            floaters.splice(f, 1);
+            continue;
+          }
+          var fx = (world.x * 0.5 + 0.5) * window.innerWidth;
+          var fy = (-world.y * 0.5 + 0.5) * window.innerHeight - item.age * 36;
+          item.el.style.opacity = String(clamp(life, 0, 1));
+          item.el.style.transform = "translate(" + fx + "px, " + fy + "px) translate(-50%, -100%)";
+        }
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        var dt = Math.min(clock.getDelta(), 0.05);
+        clock.delta = dt;
+        if (!state.dragging) planetGroup.rotation.y += dt * 0.07;
+        if (clouds) clouds.rotation.y += dt * 0.018;
+        if (setupScene.satPivot) setupScene.satPivot.rotation.y += dt * 0.22;
+        if (setupScene.orbit) setupScene.orbit.rotation.z += dt * 0.05;
+
+        var t = clock.elapsedTime;
+        for (var i = 0; i < markers.length; i++) {
+          var marker = markers[i];
+          var pulse = 1 + Math.sin(t * 2.4 + marker.phase) * 0.12;
+          marker.beacon.scale.setScalar(pulse);
+          if (marker.flash > 0) {
+            marker.flash = Math.max(0, marker.flash - dt);
+            marker.ring.material.color.copy(marker.baseColor).lerp(marker.flashColor, marker.flash);
+          }
+          var selected = marker.region.id === state.selectedId;
+          marker.halo.scale.setScalar(selected ? 1.25 + Math.sin(t * 4) * 0.08 : 1);
+        }
+
+        for (var e = effects.length - 1; e >= 0; e--) {
+          var fx = effects[e];
+          fx.life -= dt;
+          var k = clamp(fx.life / fx.max, 0, 1);
+          fx.ring.scale.setScalar(1 + (1 - k) * 3.2);
+          fx.mat.opacity = k;
+          if (fx.life <= 0) {
+            planetGroup.remove(fx.group);
+            fx.group.traverse(function (child) {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+            effects.splice(e, 1);
+          }
+        }
+
+        controls.update();
+        updateLabels();
+        renderer.render(setupScene.scene, camera);
+      }
+
+      function start() {
+        if (typeof THREE === "undefined" || !THREE.OrbitControls) {
+          fail("Не удалось загрузить Three.js. Проверьте сеть и откройте файл снова.");
+          return;
+        }
+        UP = new THREE.Vector3(0, 1, 0);
+        hitMaterial = new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          depthWrite: false
+        });
+
+        var planetTex = buildPlanetTexture();
+        var cloudCanvas = buildCloudTexture();
+        setupScene(planetTex, cloudCanvas);
+
+        var sites = chooseSites(planetTex.heights, planetTex.w, planetTex.h, REGION_DEFS.length);
+        regions = REGION_DEFS.map(function (def, index) {
+          return {
+            id: def.id,
+            name: def.name,
+            status: def.status,
+            tone: def.tone,
+            desc: def.desc,
+            ore: def.ore,
+            energy: def.energy,
+            threat: def.threat,
+            color: def.color,
+            contested: def.contested,
+            hostile: false,
+            lat: sites[index].lat,
+            lon: sites[index].lon
+          };
+        });
+        for (var i = 0; i < regions.length; i++) createMarker(regions[i]);
+        focusCameraOn(regions[0].lat, regions[0].lon);
+
+        bindUI();
+        paintHUD();
+        log("Канал связи с Аркадией-7 установлен.", "info");
+        log("Метки регионов активны. Ожидание приказов.", "info");
+
+        dom.loader.classList.add("hide");
+        setTimeout(function () {
+          if (dom.loader.classList.contains("hide")) dom.loader.hidden = true;
+        }, 500);
+
+        simTimer = setInterval(simTick, CONFIG.simMs);
+        orcTimer = setInterval(orcTick, CONFIG.orcMs);
+        animate();
+      }
+
+      setTimeout(start, 40);
+    })();
+  </script>
+</body>
+</html>
